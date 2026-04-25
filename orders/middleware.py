@@ -1,5 +1,5 @@
-from .managers import _thread_locals
 from .models import Tenant
+from .tenant_context import set_current_tenant, clear_current_tenant
 
 
 class TenantMiddleware:
@@ -7,17 +7,15 @@ class TenantMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Simulated tenant (header-based)
         tenant_id = request.headers.get("X-Tenant")
 
         if tenant_id:
-            try:
-                tenant = Tenant.objects.get(id=tenant_id)
-                _thread_locals.tenant = tenant
-            except Tenant.DoesNotExist:
-                _thread_locals.tenant = None
+            tenant = Tenant.objects.filter(id=tenant_id).first()
+            set_current_tenant(tenant)
 
-        response = self.get_response(request)
+        try:
+            response = self.get_response(request)
+        finally:
+            clear_current_tenant()
 
-        _thread_locals.tenant = None
         return response

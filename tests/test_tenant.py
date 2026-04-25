@@ -1,18 +1,31 @@
-from orders.models import Tenant, Order, Customer
-from orders.managers import _thread_locals
+import pytest
+from orders.models import Tenant, Customer, Order
+from orders.tenant_context import set_current_tenant, clear_current_tenant
 
 
+@pytest.mark.django_db
 def test_tenant_isolation():
-    tenant_a = Tenant.objects.create(name="A")
-    tenant_b = Tenant.objects.create(name="B")
+    t1 = Tenant.objects.create(name="Tenant A")
+    t2 = Tenant.objects.create(name="Tenant B")
 
-    customer = Customer.objects.create(name="Test")
+    customer = Customer.objects.create(name="John")
 
-    Order.objects.create(tenant=tenant_a, customer=customer)
-    Order.objects.create(tenant=tenant_b, customer=customer)
+    Order._base_manager.create(tenant=t1, customer=customer)
+    Order._base_manager.create(tenant=t2, customer=customer)
 
-    _thread_locals.tenant = tenant_a
+    set_current_tenant(t1)
 
-    orders = Order.objects.all()
+    assert Order.objects.count() == 1
+    assert Order.objects.first().tenant == t1
 
-    assert all(o.tenant == tenant_a for o in orders)
+    clear_current_tenant()
+
+
+@pytest.mark.django_db
+def test_objects_all_is_scoped():
+    t1 = Tenant.objects.create(name="Tenant A")
+    customer = Customer.objects.create(name="John")
+
+    Order._base_manager.create(tenant=t1, customer=customer)
+
+    assert Order.objects.all().count() == 0
